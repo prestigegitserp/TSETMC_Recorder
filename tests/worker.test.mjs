@@ -101,3 +101,8 @@ test('temporary missing filter-name binding does not create a new filter session
   await send(obs(id,1,[r],{observedName:'A',observedCode:'x=1'}),source(1));
   await send(obs(id,2,[r],{status:'filter_identity_unverified',warnings:['FILTER_NAME_BINDING_MISSING','FILTER_CODE_BINDING_MISSING']}),source(1));assert.equal(e.maps.sessions.size,1);
 });
+test('sampler storage errors are scoped to the owning tab and visible in history',async()=>{
+  const e=environment(),send=await load(e),start=await send({type:'START_TAB',tabId:1,label:'خطای ذخیره',config:{}}),id=start.result.captureId;
+  assert.equal((await send({type:'HEALTH',captureId:id,error:'SIMULATED_DISK_FAILURE',docId:'d1'},source(1))).ok,true);assert.equal(e.session['binding.1'].lastStatus,'sampler_error');assert.ok([...e.maps.events.values()].some(e=>e.type==='SAMPLER_STATUS'));
+  assert.equal((await send({type:'HEALTH',captureId:id,error:'foreign'},source(2))).ok,false);
+});

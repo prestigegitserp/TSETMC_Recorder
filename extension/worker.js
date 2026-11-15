@@ -231,6 +231,11 @@ chrome.runtime.onMessage.addListener((m,sender,reply)=>{
       if(!content)throw Error('پیام مخصوص صفحه است.');const cap=await DB.get('captures',m.envelope?.captureId);
       if(!cap||cap.tabId!==sender.tab.id)throw Error('ضبط متعلق به این تب نیست.');return ingest(m.envelope);
     }
+    if(m.type==='HEALTH'){
+      const cap=await DB.get('captures',m.captureId);if(!cap||cap.tabId!==sender.tab.id)throw Error('ضبط متعلق به این تب نیست.');
+      await event(cap.id,'SAMPLER_STATUS',{status:'sampler_error',error:String(m.error||'').slice(0,500),docId:String(m.docId||'').slice(0,100)});
+      await patchBinding(sender.tab.id,b=>b.captureId===cap.id?{...b,lastStatus:'sampler_error',lastError:String(m.error||'').slice(0,500)}:b);return {recorded:true};
+    }
     if(m.type==='MAP'){
       if(!content)throw Error('پیام مخصوص صفحه است.');const id=sender.tab.id,b=await binding(id),draft=(await chrome.storage.session.get(dkey(id)))[dkey(id)]||{};
       const config=C.settings({...draft,...b?.config,profile:m.profile,mappingRevision:Date.now()});await chrome.storage.session.set({[dkey(id)]:config});

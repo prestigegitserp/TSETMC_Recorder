@@ -3,7 +3,7 @@
   'use strict';
   const channel='borsa.recorder.v2';
   const roles={
-    content:new Set(['HELLO','INGEST','MAP']),
+    content:new Set(['HELLO','INGEST','MAP','HEALTH']),
     dashboard:new Set(['LIST','SAVE_DRAFT','START_TAB','STOP_TAB','PROBE_TAB','PICK_TAB','SNAPSHOT_TAB','REFRESH_TAB','DIAG_TAB','EXPORT','CHECKPOINT_TAB']),
     offscreen:new Set(['DOWNLOAD','EXPORT_PROGRESS','EXPORT_FINISHED'])
   };

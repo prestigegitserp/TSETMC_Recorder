@@ -14,7 +14,7 @@ const fixtureUrl='http://old.tsetmc.com/Loader.aspx?ParTree=15131F';
 async function poll(fn,predicate,description,timeout=20000){const until=Date.now()+timeout;let value;while(Date.now()<until){value=await fn();if(predicate(value))return value;await new Promise(r=>setTimeout(r,150));}throw Error(`Timed out: ${description}; last=${JSON.stringify(value).slice(0,1000)}`);}
 test('native Chromium recorder, IndexedDB and XLSX pipeline',{timeout:180000},async t=>{
   await fs.mkdir(output,{recursive:true});const profile=await fs.mkdtemp(path.join(os.tmpdir(),'borsa-native-')),downloads=path.join(output,'downloads');await fs.mkdir(downloads,{recursive:true});
-  let context,dashboard,worker;const errors=[],results=[];
+  let context,dashboard,worker,senderShapes=[];const errors=[],results=[];
   try{
     const extension=path.join(root,'extension');
     context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,acceptDownloads:true,downloadsPath:downloads,ignoreDefaultArgs:['--disable-extensions'],...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{}),args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,'--no-sandbox','--disable-dev-shm-usage']});
@@ -50,6 +50,16 @@ test('native Chromium recorder, IndexedDB and XLSX pipeline',{timeout:180000},as
       await a.evaluate(()=>document.querySelector('#watch tbody').append(savedRow));
       const states=await poll(()=>db('states'),ss=>ss.some(s=>s.stats['ins:11111111111111111']?.reappearances===1),'reappearance');
       assert.equal(states.filter(s=>s.stats['ins:11111111111111111']?.reappearances===1).length,1);
+    });
+    await step('storage failure is visible, bounded, and recovers without a false ACK',async()=>{
+      await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},func:()=>{globalThis.__testStorageSet=chrome.storage.local.set;chrome.storage.local.set=async()=>{throw Error('SIMULATED_STORAGE_FAILURE');};}}),aid);
+      const health=()=>worker.evaluate(async tabId=>{const [r]=await chrome.scripting.executeScript({target:{tabId},func:()=>globalThis.BorsaRecorder.health()});return r.result;},aid);
+      await poll(health,h=>h.unsaved===8,'bounded unsaved queue');
+      assert.ok((await health()).volatileBytes<=16*1024*1024);
+      assert.ok((await db('events')).some(e=>e.type==='SAMPLER_STATUS'&&e.detail.error.includes('SIMULATED_STORAGE_FAILURE')));
+      await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},func:()=>{chrome.storage.local.set=globalThis.__testStorageSet;delete globalThis.__testStorageSet;}}),aid);
+      await poll(health,h=>h.unsaved===0&&h.pending===0,'recovered durable queue');
+      await poll(()=>db('events'),es=>es.some(e=>e.type==='SAMPLING_BACKPRESSURE'),'explicit backpressure interval');
     });
     await step('a verified flag cannot pretend a virtualized table is complete',async()=>{
       const virtual={rootSelector:'#virtual',rowSelector:':scope > [role="row"]',cellSelector:'[role="gridcell"]',symbolColumn:0,coverage:'complete_verified'};
@@ -87,12 +97,13 @@ test('native Chromium recorder, IndexedDB and XLSX pipeline',{timeout:180000},as
       await poll(()=>dashboard.evaluate(async()=>Object.keys(await chrome.storage.local.get(null)).filter(k=>k.startsWith('pending.')).length),n=>n===0,'durable queues drained');assert.equal((await api('LIST')).result.tabs.filter(t=>t.binding).length,0);
     });
     await step('worker restart preserves history and remains reachable from dashboard',async()=>{
+      senderShapes=await worker.evaluate(()=>senderTrace.filter((s,i,a)=>a.findIndex(x=>x.type===s.type&&x.url===s.url)===i));
       const before=(await db('frames')).length,cdp=await context.newCDPSession(dashboard);await cdp.send('ServiceWorker.enable');await cdp.send('ServiceWorker.stopAllWorkers');
       const listed=await poll(()=>api('LIST'),r=>r.ok,'worker wake');assert.ok(listed.result.sessions.length>=2);assert.equal((await db('frames')).length,before);await cdp.detach();
     });
     await dashboard.locator('#reload').click();await dashboard.screenshot({path:path.join(output,'dashboard.png'),fullPage:true});
     assert.deepEqual(errors,[]);
-    const summary={browser:context.browser().version(),version:'2.0.0',cases:results,fixtureOnly:true,liveTsetmcTested:false,pageErrors:errors};await fs.writeFile(path.join(output,'native-summary.json'),JSON.stringify(summary,null,2));
+    const summary={browser:context.browser().version(),version:'2.0.0',cases:results,senderShapes,fixtureOnly:true,liveTsetmcTested:false,pageErrors:errors};await fs.writeFile(path.join(output,'native-summary.json'),JSON.stringify(summary,null,2));
   }catch(e){if(dashboard)await dashboard.screenshot({path:path.join(output,'failure.png'),fullPage:true}).catch(()=>{});throw e;}
   finally{await context?.close();await fs.rm(profile,{recursive:true,force:true});}
 });

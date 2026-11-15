@@ -5,7 +5,7 @@
   globalThis.BorsaRecorder?.dispose?.();
   const docId=C.uuid(),pending=new Map(),volatile=[],listeners=[],timers=new Set();
   let binding=null,config=C.settings({}),seq=0,recording=false,disposed=false,explicitStop=false;
-  let interval=null,debounce=null,writeBusy=false,sendBusy=false,retryMs=1000,helloBusy=false;
+  let interval=null,debounce=null,writeBusy=false,sendBusy=false,retryMs=1000,helloBusy=false,pendingBytes=0,volatileBytes=0,lastHealthAt=0;
   let lastSignature='',lastSampleAt=0,lastAttemptAt=Date.now(),lossSince=null,lossCount=0;
   let sourceValue='',sourceKey='',sourceChangedAt=Date.now(),picker=null,host=null,box=null;
   function later(fn,ms){const id=setTimeout(()=>{timers.delete(id);if(!disposed)fn();},ms);timers.add(id);return id;}
@@ -28,6 +28,11 @@
       throw e;
     }finally{clearTimeout(timeout);}
   }
+  function notifyError(message){
+    const captureId=binding?.captureId||volatile[0]?.envelope.captureId;
+    if(!captureId||Date.now()-lastHealthAt<30000)return;lastHealthAt=Date.now();
+    void send({type:'HEALTH',captureId,status:'sampler_error',error:String(message).slice(0,500),docId,at:Date.now()}).catch(()=>{});
+  }
   function health(data,at,cfg){
     const key=cfg.profile?.sourceTimeSelector||'';
     if(data.sourceTime!==sourceValue||key!==sourceKey){sourceValue=data.sourceTime;sourceKey=key;sourceChangedAt=at;}
@@ -43,9 +48,11 @@
   async function pump(){
     if(sendBusy||disposed)return;sendBusy=true;
     try{
-      for(const [key,envelope] of pending){
+      for(const [key,meta] of pending){
+        const envelope=(await chrome.storage.local.get(key))[key];
+        if(!envelope){pending.delete(key);pendingBytes-=meta.bytes;continue;}
         const answer=await send({type:'INGEST',envelope});if(!answer?.ok)throw Error(answer?.error||'ثبت تأیید نشد.');
-        await chrome.storage.local.remove(key);pending.delete(key);retryMs=1000;
+        await chrome.storage.local.remove(key);pending.delete(key);pendingBytes-=meta.bytes;retryMs=1000;
         if(binding?.captureId===envelope.captureId)banner(`بورسا ۲: ${binding.label} | ${envelope.frame.rows.length} نماد | ${envelope.frame.status} | صف ${pending.size} | ${C.time(envelope.frame.at).local.slice(11)}`);
       }
     }catch(e){banner(`بورسا ۲: ${e.message} | ${pending.size} بستهٔ ذخیره‌شده در انتظار انتقال`);later(pump,retryMs);retryMs=Math.min(30000,retryMs*2);}
@@ -56,16 +63,16 @@
     try{
       while(volatile.length){
         const item=volatile[0];await chrome.storage.local.set({[item.key]:item.envelope});
-        volatile.shift();pending.set(item.key,item.envelope);item.resolve({durable:true});void pump();
+        volatile.shift();volatileBytes-=item.bytes;pending.set(item.key,{bytes:item.bytes});pendingBytes+=item.bytes;item.resolve({durable:true});void pump();
       }
-    }catch(e){banner(`بورسا ۲: ذخیرهٔ محلی ناموفق — ${e.message}؛ ${volatile.length} بسته هنوز فقط در حافظه‌اند.`);later(persist,2000);}
+    }catch(e){banner(`بورسا ۲: ذخیرهٔ محلی ناموفق — ${e.message}؛ ${volatile.length} بسته هنوز فقط در حافظه‌اند.`);notifyError(e.message);later(persist,2000);}
     finally{writeBusy=false;}
   }
   function sample(force=false,finalBinding=null){
     const current=finalBinding||binding;
     if(disposed||!current||(!recording&&!finalBinding))return Promise.resolve({skipped:true});
     try{
-      if(volatile.length>=8||pending.size>=128){lossSince??=Date.now();lossCount++;banner('بورسا ۲: صف پر شده؛ نمونه‌برداری موقتاً متوقف است. وقفه در نمونهٔ بعد ثبت می‌شود.');return Promise.resolve({backpressure:true});}
+      if(volatile.length>=8||pending.size+volatile.length>=128||pendingBytes>=32*1024*1024||volatileBytes>=16*1024*1024){lossSince??=Date.now();lossCount++;banner('بورسا ۲: صف پر شده؛ نمونه‌برداری موقتاً متوقف است. وقفه در نمونهٔ بعد ثبت می‌شود.');return Promise.resolve({backpressure:true});}
       const f=observation(config,'dynamic',force?'forced':'observation');
       const signature=JSON.stringify([f.rows,f.headers,f.status,f.warnings,f.sourceTime,f.observedName,f.observedCode,f.rejectedRows]);
       const heartbeat=Math.min(config.heartbeatMs,config.intervalMs);
@@ -73,9 +80,11 @@
       if(lossSince!==null){f.warnings.push('STORAGE_BACKPRESSURE_GAP');f.lossInterval={fromAt:lossSince,toAt:f.at,missedSamples:lossCount};lossSince=null;lossCount=0;}
       C.validateFrame(f);
       const envelope={captureId:current.captureId,frame:f},key=`pending.${current.captureId}.${docId}.${String(f.seq).padStart(10,'0')}`;
+      const bytes=new TextEncoder().encode(JSON.stringify(envelope)).length;
+      if(volatileBytes+bytes>16*1024*1024||pendingBytes+volatileBytes+bytes>32*1024*1024){lossSince??=Date.now();lossCount++;banner('بورسا ۲: سقف بایتی صف پر است؛ وقفهٔ نمونه‌برداری در گزارش ثبت می‌شود.');return Promise.resolve({backpressure:true});}
       lastSignature=signature;lastSampleAt=f.at;
-      return new Promise(resolve=>{volatile.push({key,envelope,resolve});void persist();});
-    }catch(e){lossSince??=Date.now();lossCount++;banner(`بورسا ۲: خواندن جدول ناموفق — ${e.message}`);return Promise.resolve({error:e.message});}
+      return new Promise(resolve=>{volatileBytes+=bytes;volatile.push({key,envelope,resolve,bytes});void persist();});
+    }catch(e){lossSince??=Date.now();lossCount++;banner(`بورسا ۲: خواندن جدول ناموفق — ${e.message}`);notifyError(e.message);return Promise.resolve({error:e.message});}
   }
   function schedule(){
     if(!recording||disposed)return;
@@ -141,6 +150,6 @@
   }
   function dispose(){disposed=true;recording=false;clearInterval(interval);clearInterval(check);for(const id of timers)clearTimeout(id);observer.disconnect();listeners.forEach(fn=>fn());picker?.();host?.remove();chrome.runtime.onMessage.removeListener(receive);}
   const check=setInterval(()=>{if(!binding&&!explicitStop)void hello();else if(recording){void sample();void pump();}},10000);
-  globalThis.BorsaRecorder={version:C.version,docId,dispose,health:()=>({recording,pending:pending.size,unsaved:volatile.length})};
+  globalThis.BorsaRecorder={version:C.version,docId,dispose,health:()=>({recording,pending:pending.size,unsaved:volatile.length,pendingBytes,volatileBytes})};
   void hello();
 })();
