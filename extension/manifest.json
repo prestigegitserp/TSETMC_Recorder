@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "بورسا | ضبط مستقل فیلترهای TSETMC",
+  "version": "2.0.0",
+  "description": "ضبط محلی چند تب، عکس داده، سابقه تغییرات نمادها، گزارش واقعی XLSX و عیب‌یابی F8.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "unlimitedStorage", "scripting", "alarms", "downloads", "offscreen"],
+  "host_permissions": ["https://*.tsetmc.com/*", "http://*.tsetmc.com/*", "https://tsetmc.com/*", "http://tsetmc.com/*"],
+  "background": {"service_worker": "worker.js", "type": "module"},
+  "action": {"default_title": "بازکردن میز ضبط بورسا"},
+  "content_scripts": [{
+    "matches": ["https://*.tsetmc.com/*", "http://*.tsetmc.com/*", "https://tsetmc.com/*", "http://tsetmc.com/*"],
+    "js": ["core.js", "protocol.js", "adapter.js", "content.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }],
+  "content_security_policy": {"extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self'"}
+}

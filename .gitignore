@@ -1,0 +1,7 @@
+node_modules/
+test-results/
+outputs/
+__pycache__/
+*.pyc
+*.zip
+SHA256SUMS.txt

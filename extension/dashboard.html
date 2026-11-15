@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>بورسا | میز ضبط</title><link rel="stylesheet" href="dashboard.css"></head>
+<body>
+<header><div><span class="eyebrow">BORSA / LOCAL OBSERVATORY</span><h1>میز ضبط فیلترها</h1><p>هر تب، یک سابقهٔ مستقل؛ هر مشاهده، همراه با زمان و کیفیت.</p></div><div class="version">نسخهٔ ۲.۰.۰<br><span id="clock"></span></div></header>
+<main>
+<div class="notice">اتصال زندهٔ این نسخه به صفحهٔ واقعی شما هنوز راستی‌آزمایی نشده است. پیش‌نمایش را بررسی کن؛ اگر ستون نماد یا جدول اشتباه بود، از «انتخاب F8» استفاده کن. این افزونه دادهٔ DOM را ضبط می‌کند و ویدئو نمی‌گیرد. <a href="selftest.html" target="_blank">آزمون داخلی و اکسل نمونهٔ ساختگی</a></div>
+<div class="metrics"><article><strong id="activeCount">۰</strong><span>تب در حال ضبط</span></article><article><strong id="sessionCount">۰</strong><span>نشست ذخیره‌شده</span></article><article><strong id="spaceCount">—</strong><span>فضای تقریبی استفاده‌شده</span></article><article><strong id="pendingCount">۰</strong><span>بسته در انتظار تأیید</span></article></div>
+<section>
+<div class="sectionHead"><div><h2>۱. تب‌ها و فیلترها</h2><p>نام واقعی فیلتر را برای هر تب بنویس. برای کد جدید، نسخه را عوض کن یا کد را در تنظیمات وارد کن.</p></div><div class="tools"><label>پنجره <select id="windowFilter"><option value="all">همهٔ پنجره‌ها</option></select></label><button id="reload">بازخوانی</button></div></div>
+<div class="toolbar"><button id="selectTabs">انتخاب همهٔ این پنجره</button><button class="primary" id="startSelected">شروع ضبط انتخاب‌ها</button><button id="snapshotSelected">عکس انتخاب‌ها + Excel</button><button class="danger" id="stopSelected">توقف انتخاب‌ها</button></div>
+<div class="tableWrap"><table><thead><tr><th>انتخاب</th><th>تب / نام فیلتر</th><th>نسخه</th><th>دوره ms</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody id="tabRows"></tbody></table></div>
+<p class="hint">تب‌های پس‌زمینه مستقل ثبت می‌شوند. جلوگیری از دورریختن خودکار تب فعال می‌شود؛ خواب رایانه، بسته‌شدن Chrome یا محدودیت زمان‌بندی مرورگر می‌تواند فاصله ایجاد کند و در گزارش ثبت می‌شود.</p>
+</section>
+<section>
+<div class="sectionHead"><div><h2>۲. آرشیو و گزارش Excel</h2><p>نشست‌های چند روز یا چند فیلتر را انتخاب کن و در یک فایل مقایسه کن. دادهٔ ذخیره‌شده با رفرش دیده‌بان پاک نمی‌شود.</p></div><button id="selectSessions">انتخاب نشست‌های نمایش‌داده‌شده</button></div>
+<div class="exportControls"><label>از روز میلادی تهران<input id="dayFrom" type="date"></label><label>تا روز میلادی تهران<input id="dayTo" type="date"></label><label>حالت گزارش<select id="exportMode"><option value="both">استاتیک + داینامیک</option><option value="static">فقط استاتیک</option><option value="dynamic">فقط داینامیک</option></select></label><label>جزئیات داینامیک<select id="exportView"><option value="changes">تغییرات + کلیدفریم‌ها</option><option value="full">بازسازی تمام سطرهای فریم‌ها</option></select></label></div>
+<details><summary>محدودکردن ساعت گزارش Excel</summary><div class="exportControls"><label>از تاریخ و ساعت میلادی تهران<input type="datetime-local" id="timeFrom" step="1"></label><label>تا تاریخ و ساعت میلادی تهران<input type="datetime-local" id="timeTo" step="1"></label></div><p class="hint">آمار نمادها و جدول مشاهده‌ها هر دو به همین بازه محدود می‌شوند. نخستین فریم بازه، در صورت نیاز با وضعیت کامل بازسازی می‌شود. آرشیو JSON کل نشست‌های انتخاب‌شده را نگه می‌دارد.</p></details>
+<div class="tableWrap archive"><table><thead><tr><th>انتخاب</th><th>فیلتر / روز</th><th>بازه تهران</th><th>فریم / عکس</th><th>هویت نسخه</th></tr></thead><tbody id="sessionRows"></tbody></table></div>
+<div class="toolbar"><button class="primary" id="exportXlsx">ساخت Excel واقعی (.xlsx)</button><button id="exportJson">آرشیو کامل (.json)</button><label class="fileButton">واردکردن آرشیوهای JSON<input id="importJson" type="file" accept=".json,application/json" multiple></label></div>
+<p class="hint">فایل‌ها در پوشهٔ BORSA داخل Downloads ذخیره می‌شوند. اکسل: حداکثر ۵۰ هزار سطر در هر برگه و ۲۰۰ هزار سطر داده در هر گزارش؛ عبور از حد با پیام روشن متوقف می‌شود و داده‌ای حذف نمی‌شود.</p>
+<div id="jobs" class="jobs"></div>
+</section>
+<section class="notes"><h2>پیش از اولین ضبط</h2><div class="noteGrid"><p><b>جدول را تأیید کن.</b> پیش‌نمایش باید همان جدول فیلتر باشد. در جدول مجازی یا صفحه‌بندی‌شده، فقط سطرهای بارگذاری‌شده قابل مشاهده‌اند. برای ثبت کامل، نمایش همه را در خود سایت انتخاب کن.</p><p><b>حافظه دو نوع است.</b> سابقهٔ ضبط مستقل ذخیره می‌شود. حافظهٔ داخلی فیلتر پس از رفرش فقط با قرارداد صریح و قابل‌آزمون بازیابی می‌شود؛ رفرش خودکار به‌صورت پیش‌فرض خاموش است.</p><p><b>تغییر فیلتر را اعلام کن.</b> نام، نسخه و کد را در تنظیمات هر تب ثبت کن. اگر فیلتر پنهانی عوض شود، بدون اتصال انتخابگر نام/کد، افزونه تضمینی برای تشخیص آن ندارد.</p><p><b>قطعی سیگنال نیست.</b> جدول مفقود/خالی نامطمئن و قطع اینترنت، خروج قطعی نماد محسوب نمی‌شوند. خروجی خام و حضور تأییدشده هر دو حفظ می‌شوند.</p></div></section>
+</main>
+<div id="message" role="status" aria-live="polite"></div>
+<dialog id="modal"><div class="modalTop"><h2 id="modalTitle"></h2><button id="closeModal">بستن</button></div><div id="modalBody"></div></dialog>
+<footer>محلی و بدون سرور واسط · بدون دسترسی به کارگزاری · بدون تغییر کد فیلتر · F8: انتخاب خانهٔ نماد</footer>
+<script src="core.js"></script><script src="protocol.js"></script><script type="module" src="dashboard.js"></script>
+</body></html>
